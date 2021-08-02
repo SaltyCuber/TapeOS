@@ -1,0 +1,161 @@
+// .Get2Ops will return both operands into R2 and R3
+// .Get1Op will return the operand into R2
+// SP is not part of the MINREG count
+// R1 will always be the main output register, R4 will contain the upper word output for multiplication and the remainder in division
+BITS >= 8
+MINREG 4
+MINRAM 
+MINSTACK 
+
+JMP .Boot
+
+.InstructionTable
+    DW .Stall               // 0
+    DW .SystemCall          // 1
+    DW .Add                 // 2
+    DW .BitwiseNOR          // 3
+    DW .BitwiseXOR          // 4
+    DW .SubtractAndShiftR   // 5
+    DW .Multiply            // 6
+    DW .Divide              // 7
+    DW .MemoryLoad          // 8
+    DW .MemoryStore         // 9
+    DW .BranchIfCarry       // A
+    DW .BranchIfZero        // B
+    DW .Jump                // C
+    DW .LoadImm             // D
+    DW .Push                // E
+    DW .Pop                 // F
+
+    DW 0              // this is only read if running in 8 bit mode
+// VARIABLES
+
+// this is the "program counter", and points to the current instruction being executed
+.InstructionPointer 
+DW .KernelMemoryLimit
+
+// this is the emulated stack pointer for programs to access
+.StackPointer
+DW 0
+
+// these are the os status flags
+// only bits 0-7 are used, extra word length will be ignored (not all 8 bits are used by system anyways)
+// bit 0 = carry flag, triggered by add, add with carry, and multiply
+// bit 1 = division by 0 flag, triggered if division by 0 is attempted
+// bit 2 = boot success flag, triggered if booted with no errors
+// bit 3 = greater than 8 bit flag, triggered if current machine has more than 8 bits
+.StatusFlags
+DW 0
+
+
+.SystemRegisters
+DW 0
+DW 0
+DW 0
+DW 0
+
+
+
+
+
+
+// INSTRUCTIONS
+
+.Stall
+// basically a No-op, doesn't require any operands
+ADD R0 R1 R1 // this is just in case a compiler discards ADD R0 R0 R0
+RET
+.SystemCall
+// calls to more complex instructions, mainly i/o and storage management
+// requires 1 operand, the system call opcode, and any data for that syscall must be pushed on the stack beforehand
+CAL .Get1Op
+IMM R3 .SystemCallTable
+ADD R2 R2 R3
+LOD R3 R2
+CAL R3
+RET
+.Add
+// adds two numbers and sets carry status flag if necessary
+// TODO: have some way of getting return value, maybe a SysCall?
+CAL .Get2Ops
+ADD R1 R2 R3
+PSH R2
+PSH R3
+LOD R2 .StatusFlags
+INC R3 R0
+NOT R3 R3
+AND R2 R2 R3
+POP R3
+POP R2
+BNC +2 R2 R3
+OR R2 R2 1
+STR .StatusFlags
+RET
+.BitwiseNOR
+CAL .Get2Ops
+NOR R1 R2 R3
+RET
+.BitwiseXOR
+CAL .Get2Ops
+XOR R1 R2 R3
+RET
+.SubtractAndShiftR
+// returns subtraction to R1, rsh r2 to r4
+CAL .Get2Ops
+SUB R1 R2 R3
+RSH R4 R2
+NEG R3 R3
+BNC .nocarry R2 R3
+LOD R2 .StatusFlags
+AND R2 R2 -2
+RET
+.Multiply
+// multiply only works on even bitwidths i'm pretty sure
+CAL .Get2Ops
+AND R1 R2 &UHALF
+AND R4 R3 &UHALF
+PSH R1
+PSH R4
+AND R2 R2 &LHALF
+AND R3 R3 &LHALF
+MLT R1 R2 R3
+POP R3
+RSH R4 &BITS
+BSR R3 R3 R4
+POP R2
+BSR R2 R2 R4
+MLT R4 R2 R3
+RET
+.Divide
+CAL .Get2Ops
+DIV R1 R2 R3
+MOD R4 R2 R3
+RET
+.MemoryLoad
+CAL .Get1Op
+LLOD .ProgramHeap R2 R2
+LOD R4 .CurrentInstruction
+AND R4 R4 3
+LSTR .SystemRegisters R4 R2
+RET
+.MemoryStore
+CAL .Get2Ops
+
+RET
+.BranchIfCarry
+CAL .Get2Ops
+RET
+.BranchIfZero
+CAL .Get2Ops
+RET
+.Jump
+CAL .Get1Op
+RET
+.LoadImm
+RET
+.Push
+CAL .Get1Op
+RET
+.Pop
+CAL .Get1Op
+RET

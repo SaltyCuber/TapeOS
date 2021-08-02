@@ -1,7 +1,8 @@
 // .Get2Ops will return both operands into R2 and R3
 // .Get1Op will return the operand into R2
 // SP is not part of the MINREG count
-// R1 will always be the main output register, R4 will contain the upper word output for multiplication and the remainder in division
+// R1 will always be the main output register, R4 will contain any extra outputs
+// Make sure to add a store output syscall when you get around to doing syscalls, me.
 BITS >= 8
 MINREG 4
 MINRAM 
